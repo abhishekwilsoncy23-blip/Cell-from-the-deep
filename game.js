@@ -2,8 +2,8 @@
 'use strict';
 
 /* ============================================================
-   EVOLVE — Cell → Human (itch.io edition)
-   Two files: index.html + game.js. No assets, no dependencies.
+   EVOLVE — Cell → Human  (final itch.io edition)
+   Two files: index.html + game.js. No assets. No dependencies.
    ============================================================ */
 
 /* ---------- 1. CANVAS & ADAPTIVE SCALING ---------- */
@@ -86,7 +86,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
     font-weight: 400; opacity: .9; margin-top: 6px; color: #9fd;
   }
 
-  /* ---- Mute button ---- */
+  /* ---- Top-right buttons ---- */
   #mute {
     position: absolute; top: 14px; right: 14px;
     width: 38px; height: 38px; border-radius: 50%;
@@ -94,9 +94,22 @@ document.head.insertAdjacentHTML('beforeend', `<style>
     display: flex; align-items: center; justify-content: center;
     font-size: 18px; cursor: pointer; pointer-events: auto;
     transition: transform .1s, background .1s;
+    -webkit-tap-highlight-color: transparent;
   }
   #mute:hover { background: rgba(20, 50, 80, .9); }
   #mute:active { transform: scale(.94); }
+
+  #fullscreen {
+    position: absolute; top: 14px; right: 62px;
+    width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(9, 26, 42, .8); border: 1px solid #24486a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; cursor: pointer; pointer-events: auto;
+    transition: transform .1s, background .1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #fullscreen:hover { background: rgba(20, 50, 80, .9); }
+  #fullscreen:active { transform: scale(.94); }
 
   /* ---- Hint ---- */
   #hint {
@@ -148,6 +161,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
     box-shadow: 0 4px 20px rgba(60, 160, 240, .3);
     transition: transform .1s, box-shadow .15s;
     -webkit-tap-highlight-color: transparent;
+    font-family: inherit;
   }
   .screen button:hover, .screen .btn:hover {
     box-shadow: 0 6px 28px rgba(80, 180, 255, .5);
@@ -194,6 +208,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
     #score { font-size: 22px; }
     #combo { font-size: 12px; }
     #mute { top: 10px; right: 10px; width: 34px; height: 34px; font-size: 16px; }
+    #fullscreen { top: 10px; right: 52px; width: 34px; height: 34px; font-size: 16px; }
     #hint { display: none; }
   }
 </style>`);
@@ -215,7 +230,8 @@ document.body.insertAdjacentHTML('beforeend', `
       <div id="combo">×1 COMBO</div>
     </div>
 
-    <div id="mute">🔊</div>
+    <div id="fullscreen" title="Fullscreen">⛶</div>
+    <div id="mute" title="Mute">🔊</div>
     <div id="toast"></div>
     <div id="hint">Hold anywhere to swim · collect relics to evolve</div>
 
@@ -367,12 +383,12 @@ const player = {
 };
 
 const state = {
-  phase: 'title',        // 'title' | 'playing' | 'dying' | 'dead' | 'won'
+  phase: 'title',
   t: 0, startT: 0,
   timeScale: 1, timeScaleTarget: 1,
   phaseTimer: 0,
   biomass: 0, totalEarned: 0,
-  score: 0, bestScoreThisRun: 0,
+  score: 0,
   stage: 0,
   comboCount: 0, comboTimer: 0, maxCombo: 0,
   nearMisses: 0,
@@ -467,7 +483,6 @@ function spawnRelic(){
   while (tries < 80){
     x = rnd(200, world.w-200); y = rnd(200, world.h-200);
     const near = Math.hypot(x-player.x, y-player.y) < 450;
-    // Avoid spawning near predators
     let nearPred = false;
     for (const q of state.predators){
       if (Math.hypot(q.x - x, q.y - y) < 300){ nearPred = true; break; }
@@ -580,7 +595,6 @@ function drawAmbient(){
         ctx.fill();
         ctx.restore();
       } else {
-        // ember / dot
         ctx.beginPath();
         ctx.arc(sx, sy, p.r, 0, 6.2832);
         ctx.fill();
@@ -595,11 +609,9 @@ function drawAmbient(){
 function update(realDt){
   state.t += realDt;
 
-  // Smooth timeScale
   state.timeScale += (state.timeScaleTarget - state.timeScale) * Math.min(1, realDt * 8);
   const dt = realDt * state.timeScale;
 
-  // Background & FX always animate
   updateAmbient(realDt);
   for (let i = state.fx.length - 1; i >= 0; i--){
     const f = state.fx[i];
@@ -616,7 +628,6 @@ function update(realDt){
     if (p.life <= 0) state.popups.splice(i, 1);
   }
 
-  // Screen shake decay
   shake.mag *= Math.pow(0.001, realDt);
   if (shake.mag < 0.15){ shake.mag = 0; shake.x = 0; shake.y = 0; }
   else {
@@ -624,13 +635,11 @@ function update(realDt){
     shake.y = (Math.random()*2-1) * shake.mag;
   }
 
-  // Toast timer
   if (toastTimer > 0){
     toastTimer -= realDt;
     if (toastTimer <= 0) document.getElementById('toast').style.opacity = 0;
   }
 
-  // Dying phase → transition to dead
   if (state.phase === 'dying'){
     state.phaseTimer -= realDt;
     player.alpha = Math.max(0, state.phaseTimer / 1.0);
@@ -640,7 +649,6 @@ function update(realDt){
     return;
   }
 
-  // Only gameplay runs during 'playing'
   if (state.phase !== 'playing') return;
 
   const p = player;
@@ -652,7 +660,6 @@ function update(realDt){
   p.invuln = Math.max(0, p.invuln - dt);
   p.flash  = Math.max(0, p.flash  - dt);
 
-  /* --- movement --- */
   let ix = 0, iy = 0;
   if (mouse.down){
     const [wx, wy] = toWorld(mouse.x, mouse.y);
@@ -673,11 +680,9 @@ function update(realDt){
     p.fx /= fl; p.fy /= fl;
   }
 
-  /* --- camera --- */
   cam.x = world.w > VW ? clamp(p.x, VW/2, world.w - VW/2) : world.w/2;
   cam.y = world.h > VH ? clamp(p.y, VH/2, world.h - VH/2) : world.h/2;
 
-  /* --- combo timer --- */
   if (state.comboTimer > 0){
     state.comboTimer -= realDt;
     if (state.comboTimer <= 0){
@@ -686,14 +691,12 @@ function update(realDt){
     }
   }
 
-  /* --- passive biomass --- */
   if (S.chloro > 0){
     const gain = S.chloro * dt;
     state.biomass += gain;
     state.totalEarned += gain;
   }
 
-  /* --- food --- */
   const targetFood = Math.floor(world.w * world.h / 55000);
   while (state.foods.length < targetFood) spawnFood();
 
@@ -728,7 +731,6 @@ function update(realDt){
     }
   }
 
-  /* --- predators --- */
   const targetPreds = STAGES[state.stage].preds;
   predTimer -= realDt;
   if (state.predators.length < targetPreds && predTimer <= 0){
@@ -754,7 +756,6 @@ function update(realDt){
     q.x = clamp(q.x + q.vx*dt, q.r, world.w - q.r);
     q.y = clamp(q.y + q.vy*dt, q.r, world.h - q.r);
 
-    // Contact
     if (d < q.r + p.r){
       if (p.invuln <= 0){
         p.hp -= (16 + state.stage*5) * S.armor * dt;
@@ -773,7 +774,6 @@ function update(realDt){
       q.x -= (dx/d)*push; q.y -= (dy/d)*push;
       p.x += (dx/d)*push*0.6; p.y += (dy/d)*push*0.6;
     } else if (d < q.r + p.r + 25*ES){
-      // Near miss
       const key = q.id;
       const now = state.t;
       if (!nearMissCooldown.has(key) || now - nearMissCooldown.get(key) > 1.5){
@@ -801,7 +801,6 @@ function update(realDt){
     }
   }
 
-  /* --- player death --- */
   if (p.hp <= 0 && state.phase === 'playing'){
     state.phase = 'dying';
     state.phaseTimer = 1.0;
@@ -811,7 +810,6 @@ function update(realDt){
     sfx.death();
   }
 
-  /* --- relics --- */
   for (let i = state.relics.length - 1; i >= 0; i--){
     const rl = state.relics[i];
     if (Math.hypot(p.x - rl.x, p.y - rl.y) < p.r + 30*ES){
@@ -833,7 +831,6 @@ function update(realDt){
       else toast(`${m.name}  Lv ${lvl}`, m.desc);
       uiDirty = true;
 
-      // Milestone: 3 mutations maxed
       const maxed = MUT_LIST.filter(mm => player.levels[mm.key] >= mm.max).length;
       if (maxed >= 3 && !state.milestones.maxed3){
         state.milestones.maxed3 = true;
@@ -847,7 +844,6 @@ function update(realDt){
     if (state.relics.length === before) break;
   }
 
-  /* --- stage progression --- */
   let s = state.stage;
   while (s + 1 < STAGES.length && state.totalEarned >= STAGES[s+1].need) s++;
   if (s !== state.stage){
@@ -863,7 +859,6 @@ function update(realDt){
     initAmbient();
     uiDirty = true;
 
-    // Milestone: reach Mammal under 3 min
     if (s === 7 && (state.t - state.startT) < 180 && !state.milestones.mammal3min){
       state.milestones.mammal3min = true;
       setTimeout(()=>toast('Milestone', 'Mammal in under 3 minutes'), 1200);
@@ -879,13 +874,11 @@ function update(realDt){
     }
   }
 
-  /* --- milestone: survived 60s --- */
   if (!state.milestones.survived60 && (state.t - state.startT) >= 60){
     state.milestones.survived60 = true;
     toast('Milestone', 'Survived 60 seconds');
   }
 
-  /* --- new best check --- */
   if (!state.newBestThisRun && state.score > save.bestScore){
     state.newBestThisRun = true;
     addPopup(p.x, p.y - 50, 'NEW BEST!', '#ffe07a');
@@ -1139,25 +1132,20 @@ function render(){
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, VW, VH);
 
-  // Background gradient
   const bg = ctx.createLinearGradient(0, 0, 0, VH);
   bg.addColorStop(0, st.bg[0]);
   bg.addColorStop(1, st.bg[1]);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, VW, VH);
 
-  // Ambient particles (parallax layers)
   drawAmbient();
 
-  // World content — shake applies here
   if (state.phase !== 'title'){
-    // World bounds
     const [bx, by] = toScreen(0, 0);
     ctx.strokeStyle = 'rgba(120,220,255,.20)';
     ctx.lineWidth = 3;
     ctx.strokeRect(bx, by, world.w, world.h);
 
-    // Food
     for (const f of state.foods){
       const [sx, sy] = toScreen(f.x, f.y);
       if (sx < -20 || sy < -20 || sx > VW+20 || sy > VH+20) continue;
@@ -1171,7 +1159,6 @@ function render(){
     }
     ctx.shadowBlur = 0;
 
-    // Relics
     for (const rl of state.relics){
       const [sx, sy] = toScreen(rl.x, rl.y);
       const pulse = 1 + 0.2*Math.sin(state.t*2.6 + rl.ph);
@@ -1196,7 +1183,6 @@ function render(){
     }
     ctx.shadowBlur = 0;
 
-    // Predators
     for (const q of state.predators){
       const [sx, sy] = toScreen(q.x, q.y);
       if (sx < -80 || sy < -80 || sx > VW+80 || sy > VH+80) continue;
@@ -1226,7 +1212,6 @@ function render(){
       ctx.fill();
     }
 
-    // Player
     if (state.phase !== 'dead' && state.phase !== 'won'){
       const [px, py] = toScreen(p.x, p.y);
       const flick = p.invuln > 0 && Math.floor(state.t*12) % 2 === 0;
@@ -1259,12 +1244,10 @@ function render(){
       }
     }
   } else {
-    // Title — floating hero cell in the middle
     const cx = VW/2, cy = VH/2 + 80;
     drawCreature(cx, cy, 26 * ES, 0, state.t, { x: 0, y: 1 }, st.body, false);
   }
 
-  // FX particles
   for (const f of state.fx){
     const [sx, sy] = toScreen(f.x, f.y);
     ctx.globalAlpha = Math.max(0, f.life / f.max);
@@ -1275,7 +1258,6 @@ function render(){
   }
   ctx.globalAlpha = 1;
 
-  // Score popups (world-space)
   for (const pu of state.popups){
     const [sx, sy] = toScreen(pu.x, pu.y);
     const a = Math.max(0, pu.life / pu.max);
@@ -1289,14 +1271,12 @@ function render(){
   }
   ctx.globalAlpha = 1;
 
-  // Edge arrows for off-screen relics
   if (state.phase === 'playing' || state.phase === 'dying'){
     for (const rl of state.relics){
       drawEdgeHint(rl.x, rl.y, MUT_COLOR[rl.key] || 'rgba(255,212,94,.9)');
     }
   }
 
-  // Vignette
   const v = ctx.createRadialGradient(VW/2, VH/2, Math.min(VW,VH)*0.35,
                                      VW/2, VH/2, Math.max(VW,VH)*0.78);
   v.addColorStop(0, 'rgba(0,0,0,0)');
@@ -1304,7 +1284,6 @@ function render(){
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, VW, VH);
 
-  // Damage vignette
   if (state.phase === 'playing' && p.hp < p.maxHp * 0.35){
     const a = (1 - p.hp/(p.maxHp*0.35)) * 0.25 * (0.6 + 0.4*Math.sin(state.t*6));
     ctx.fillStyle = `rgba(255,40,60,${a})`;
@@ -1325,7 +1304,6 @@ function updateUI(){
   document.getElementById('progFill').style.width =
     nxt ? clamp((state.totalEarned - cur)/(nxt - cur)*100, 0, 100) + '%' : '100%';
 
-  // Combo
   const cEl = document.getElementById('combo');
   const mult = comboMult();
   if (mult > 1){
@@ -1335,7 +1313,6 @@ function updateUI(){
     cEl.classList.remove('on');
   }
 
-  // Pips
   const pips = document.getElementById('pips');
   pips.innerHTML = '';
   for (const m of MUT_LIST){
@@ -1375,7 +1352,6 @@ function resetGame(){
   state.biomass = 0;
   state.totalEarned = 0;
   state.score = 0;
-  state.bestScoreThisRun = 0;
   state.stage = 0;
   state.comboCount = 0;
   state.comboTimer = 0;
@@ -1424,7 +1400,6 @@ function finishRun(won){
   const finalScore = Math.floor(state.score);
   const isBest = finalScore > save.bestScore;
 
-  // Update save
   if (isBest) save.bestScore = finalScore;
   if (won && (save.bestTime === 0 || runTime < save.bestTime)) save.bestTime = runTime;
 
@@ -1434,7 +1409,6 @@ function finishRun(won){
   save.top5 = save.top5.slice(0, 5);
   persist();
 
-  // Build stats block
   const statsHTML = `
     <div class="row"><span class="k">Score</span><span class="v">${finalScore.toLocaleString()}</span></div>
     <div class="row"><span class="k">Time</span><span class="v">${runTime.toFixed(1)}s</span></div>
@@ -1463,10 +1437,8 @@ function finishRun(won){
   document.getElementById('title-best').textContent = save.bestScore.toLocaleString();
 }
 
-// Overlay click → restart
 sTitle.addEventListener('pointerup', startGame);
 sDead.addEventListener('pointerup', (e) => {
-  // Don't double-fire if button clicked
   if (e.target.tagName !== 'BUTTON') startGame();
 });
 sWon.addEventListener('pointerup', (e) => {
@@ -1482,7 +1454,8 @@ document.getElementById('btn-again').addEventListener('pointerup', (e) => {
   e.stopPropagation(); startGame();
 });
 
-// Mute button
+/* ---------- 14. MUTE + FULLSCREEN ---------- */
+
 const muteBtn = document.getElementById('mute');
 function updateMuteIcon(){
   muteBtn.textContent = sfx.muted ? '🔇' : '🔊';
@@ -1497,7 +1470,54 @@ muteBtn.addEventListener('pointerup', (e) => {
   sfx.click();
 });
 
-/* ---------- 14. INPUT ---------- */
+/* Fullscreen */
+const fsBtn = document.getElementById('fullscreen');
+
+function isFullscreen(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement ||
+            document.msFullscreenElement);
+}
+
+function updateFsIcon(){
+  fsBtn.textContent = isFullscreen() ? '⊠' : '⛶';
+}
+
+function fsFallback(){
+  toast('Fullscreen unavailable', 'Use your browser or itch.io fullscreen button');
+}
+
+function toggleFullscreen(){
+  const doc = document;
+  const el  = doc.documentElement;
+
+  if (!isFullscreen()){
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (!req){ fsFallback(); return; }
+    try {
+      const p = req.call(el);
+      if (p && typeof p.catch === 'function') p.catch(fsFallback);
+    } catch(e){ fsFallback(); }
+  } else {
+    const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+    if (exit){
+      try { exit.call(doc).catch(()=>{}); } catch(e){}
+    }
+  }
+}
+
+fsBtn.addEventListener('pointerup', (e) => {
+  e.stopPropagation();
+  sfx.init(); sfx.resume(); sfx.click();
+  toggleFullscreen();
+});
+
+document.addEventListener('fullscreenchange',       () => setTimeout(resize, 120));
+document.addEventListener('webkitfullscreenchange', () => setTimeout(resize, 120));
+document.addEventListener('msfullscreenchange',     () => setTimeout(resize, 120));
+
+updateFsIcon();
+
+/* ---------- 15. INPUT ---------- */
 
 cvs.addEventListener('pointerdown', e => {
   if (state.phase !== 'playing') return;
@@ -1520,19 +1540,17 @@ window.addEventListener('pointercancel', pointerUp);
 window.addEventListener('blur', pointerUp);
 document.addEventListener('gesturestart', e => e.preventDefault());
 
-// Restart key
 addEventListener('keydown', e => {
   if (e.key.toLowerCase() === 'r'){
     if (state.phase === 'dead' || state.phase === 'won') startGame();
   }
 });
 
-// Pause when tab hidden
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) mouse.down = false;
 });
 
-/* ---------- 15. BOOT & LOOP ---------- */
+/* ---------- 16. BOOT & LOOP ---------- */
 
 let last = performance.now();
 let uiTimer = 0;
@@ -1540,7 +1558,7 @@ let uiTimer = 0;
 function frame(now){
   let dt = (now - last) / 1000;
   last = now;
-  if (dt > 0.2) dt = 0.05; // huge gaps (tab switch) → skip
+  if (dt > 0.2) dt = 0.05;
 
   update(dt);
   render();
@@ -1551,7 +1569,6 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 
-// Init
 resize();
 document.getElementById('title-best').textContent =
   save.bestScore > 0 ? save.bestScore.toLocaleString() : '—';
