@@ -2,16 +2,272 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#04121f">
-  <title>Evolve — From Cell to Human</title>
+  <meta name="description" content="Evolve: The Deep. Swim from a single cell through 15 stages to Apocalypse. Absorb biomass, mutate your DNA, survive lightning strikes and moving black holes.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Evolve: The Deep</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>">
+
+  <!-- Yandex Games SDK -->
+  <script src="/sdk.js"></script>
+
   <style>
-    html,body{margin:0;height:100%;overflow:hidden;background:#000;touch-action:none}
-    #c{display:block;position:fixed;inset:0;touch-action:none}
+    *{box-sizing:border-box;-webkit-touch-callout:none}
+    html,body{margin:0;width:100%;height:100%;position:fixed;inset:0;overflow:hidden;background:#000;
+      touch-action:none;overscroll-behavior:none;
+      user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+
+    /* Logical 1280x720 stage, scaled to fit the window by game.js */
+    #stage{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;overflow:hidden;background:#02080f;color:#fff}
+    #c{display:block;width:1280px;height:720px}
+
+    /* ---------- HUD ---------- */
+    #hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;text-shadow:0 2px 6px rgba(0,0,0,.8);z-index:10}
+    #hud.on{opacity:1}
+    #hud button{pointer-events:auto}
+    .glass{background:rgba(6,16,28,.55);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:14px}
+
+    #hud-left{position:absolute;left:18px;top:16px;width:288px;padding:12px 14px}
+    #lvl-name{font-weight:800;font-size:14px;letter-spacing:.6px;color:#9ff7d4;text-transform:uppercase;margin-bottom:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bar{height:10px;border-radius:6px;background:rgba(255,255,255,.12);overflow:hidden;margin-bottom:7px}
+    .fill{height:100%;width:100%;transition:width .15s}
+    #hp-fill{background:linear-gradient(90deg,#ff4757,#ff7f8f)}
+    #ammo-fill{background:linear-gradient(90deg,#1dd1a1,#7bed9f)}
+    #pow{font-size:14px;font-weight:700;min-height:18px;color:#ffd166}
+    #mut-hud{font-size:13px;font-weight:700;color:#b8f7d4;margin-top:3px;line-height:1.35;min-height:0}
+
+    #hud-top{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:8px 26px;text-align:center}
+    #timer{font-size:36px;font-weight:900;letter-spacing:1px;font-variant-numeric:tabular-nums}
+    #timer.danger{color:#ff4757;animation:pulse .5s infinite}
+    #objectives{display:flex;gap:20px;justify-content:center;font-weight:800;font-size:17px;margin-top:2px}
+
+    #hud-right{position:absolute;right:18px;top:16px;text-align:right}
+    #score{font-size:32px;font-weight:900;color:#ffd166;font-variant-numeric:tabular-nums;text-shadow:0 0 14px rgba(255,209,102,.35)}
+    .icon-btn{pointer-events:auto;margin-top:8px;width:46px;height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.25);
+      background:rgba(6,16,28,.6);color:#fff;font-size:20px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+    .icon-btn:hover{background:rgba(255,255,255,.14)}
+    #btn-mute{position:absolute;right:18px;bottom:18px;z-index:30;margin:0}
+
+    /* Floating joystick ring */
+    #joy-ring{position:absolute;width:150px;height:150px;margin:-75px 0 0 -75px;border-radius:50%;
+      border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.06);display:none}
+    #joy-ring.on{display:block}
+    #joy-knob{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;
+      background:radial-gradient(circle at 35% 35%,#fff7b0,#ffd166);box-shadow:0 0 18px rgba(255,209,102,.7)}
+
+    /* Achievement / level banner */
+    #banner{position:absolute;left:50%;top:132px;transform:translate(-50%,-12px);text-align:center;opacity:0;
+      transition:opacity .4s,transform .4s;pointer-events:none;white-space:nowrap}
+    #banner.show{opacity:1;transform:translate(-50%,0)}
+    #banner-t{font-size:38px;font-weight:900;letter-spacing:1px}
+    #banner-s{font-size:19px;color:#cfe9ff;margin-top:4px}
+    #banner.warn #banner-t{color:#ff4757;animation:pulse .6s infinite}
+
+    /* ---------- SCREENS ---------- */
+    .screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+      text-align:center;z-index:20;padding:24px;pointer-events:auto;
+      background:radial-gradient(ellipse at center,rgba(4,22,38,.74),rgba(0,4,10,.95))}
+    .screen.on{display:flex;animation:fade .35s ease-out}
+
+    .logo{font-size:118px;line-height:.95;margin:0;font-weight:900;letter-spacing:4px;
+      background:linear-gradient(180deg,#d6ffe6,#2ed573 55%,#0fb36b);-webkit-background-clip:text;background-clip:text;
+      color:transparent;filter:drop-shadow(0 6px 22px rgba(46,213,115,.45))}
+    .logo.small{font-size:74px}
+    .subtitle{font-size:24px;font-weight:700;letter-spacing:10px;color:#9ff7d4;margin-top:6px;text-transform:uppercase}
+    .lead{font-size:22px;line-height:1.5;color:#dfe6ea;margin:26px 0 0;max-width:740px}
+    .hint{margin-top:22px;font-size:15px;color:#8fa6b5;letter-spacing:.3px}
+    #best{margin-top:14px;font-size:18px;font-weight:800;color:#ffd166}
+    .stat{font-size:20px;color:#cfe9ff;margin:10px 0 0;font-weight:700}
+    .note{font-size:16px;color:#ffd166;margin:10px 0 0;min-height:22px;font-weight:600}
+    .bad{font-size:72px;margin:0;font-weight:900;color:#ff4757;text-shadow:0 0 22px rgba(255,71,87,.5)}
+    .screen h2{font-size:64px;margin:0;font-weight:900;letter-spacing:3px}
+    .screen p.msg{font-size:23px;color:#dfe6ea;margin:12px 0 0;max-width:740px;line-height:1.45}
+
+    .btns{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:26px}
+    .btn{pointer-events:auto;cursor:pointer;border:0;border-radius:14px;padding:16px 36px;min-width:220px;
+      font:800 22px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:.5px;color:#06210f;
+      background:linear-gradient(180deg,#8ff7b8,#2ed573);box-shadow:0 8px 22px rgba(46,213,115,.35);
+      transition:transform .12s,filter .2s}
+    .btn:hover{filter:brightness(1.08)}
+    .btn:active{transform:scale(.96)}
+    .btn.ghost{background:rgba(255,255,255,.1);color:#fff;box-shadow:none;border:1px solid rgba(255,255,255,.28)}
+    .btn.gold{background:linear-gradient(180deg,#ffe38a,#ffb703);color:#3b2600;box-shadow:0 8px 22px rgba(255,183,3,.35)}
+    .btn:focus-visible{outline:3px solid #fff;outline-offset:3px}
+
+    /* DNA Mutation picker */
+    #mut-label{margin-top:18px;font-size:15px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#9ff7d4}
+    #mut-choices{display:flex;gap:16px;justify-content:center;margin-top:10px;width:100%;max-width:860px}
+    .mcard{pointer-events:auto;cursor:pointer;flex:1;min-width:220px;max-width:272px;padding:16px 14px;border-radius:16px;
+      border:2px solid rgba(255,255,255,.18);background:rgba(8,26,44,.75);color:#fff;text-align:center;
+      transition:transform .14s,border-color .14s,background .14s,box-shadow .14s;display:flex;flex-direction:column;align-items:center;gap:6px}
+    .mcard:hover{background:rgba(16,44,70,.88);border-color:rgba(159,247,212,.55);transform:translateY(-2px)}
+    .mcard.sel{border-color:#ffd166;background:rgba(24,52,44,.9);box-shadow:0 0 24px rgba(255,209,102,.32);transform:translateY(-3px)}
+    .mcard .m-ico{font-size:40px;line-height:1}
+    .mcard .m-name{font-size:20px;font-weight:800;color:#fff}
+    .mcard .m-desc{font-size:15px;color:#cfe9ff;line-height:1.3}
+    .mcard .m-rank{font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#ffd166;
+      padding:3px 10px;border-radius:999px;background:rgba(255,209,102,.14);margin-top:2px}
+
+    /* Tutorial cards */
+    .tcard{display:none;flex-direction:column;align-items:center;gap:12px;max-width:660px}
+    .tcard.on{display:flex;animation:pop .35s ease-out}
+    .tcard .ico{font-size:88px;filter:drop-shadow(0 6px 18px rgba(0,0,0,.4))}
+    .tcard h3{font-size:46px;margin:0;color:#9ff7d4;font-weight:900}
+    .tcard p{font-size:23px;line-height:1.5;color:#e4ecf1;margin:0}
+    .dots{display:flex;gap:10px;margin-top:26px}
+    .dot{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.25);transition:transform .2s,background .2s}
+    .dot.on{background:#2ed573;transform:scale(1.3)}
+
+    /* Portrait prompt (mobile touch devices) */
+    #rotate{position:fixed;inset:0;display:none;z-index:9999;background:#05111c;color:#fff;
+      align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px}
+    #rotate.show{display:flex}
+    #rotate .rot-ico{font-size:88px;animation:spin 2.4s infinite ease-in-out;display:inline-block}
+    #rotate h2{font-size:34px;margin:18px 0 6px}
+    #rotate p{font-size:19px;color:#9fb3c1;margin:0}
+
+    @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
+    @keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+    @keyframes fade{from{opacity:0}to{opacity:1}}
+    @keyframes spin{0%{transform:rotate(-90deg)}50%{transform:rotate(0deg)}100%{transform:rotate(-90deg)}}
+
+    noscript div{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;background:#000}
   </style>
 </head>
 <body>
-  <canvas id="c"></canvas>
+
+  <div id="stage">
+    <canvas id="c"></canvas>
+
+    <!-- In-game HUD -->
+    <div id="hud">
+      <div id="hud-left" class="glass">
+        <div id="lvl-name">1/15 · Primordial Cell</div>
+        <div class="bar"><div class="fill" id="hp-fill"></div></div>
+        <div class="bar"><div class="fill" id="ammo-fill"></div></div>
+        <div id="pow"></div>
+        <div id="mut-hud"></div>
+      </div>
+
+      <div id="hud-top" class="glass">
+        <div id="timer">00:55</div>
+        <div id="objectives"><span id="o-bio">🟢 0/45</span><span id="o-relic">💎 0/5</span></div>
+      </div>
+
+      <div id="hud-right">
+        <div id="score">0</div>
+        <button class="icon-btn" id="btn-pause" aria-label="Pause">⏸</button>
+      </div>
+
+      <div id="banner"><div id="banner-t"></div><div id="banner-s"></div></div>
+      <div id="joy-ring"><div id="joy-knob"></div></div>
+    </div>
+
+    <!-- Title -->
+    <div class="screen" id="s-title">
+      <div class="logo">EVOLVE</div>
+      <div class="subtitle">The Deep</div>
+      <p class="lead">Start as a single cell and evolve through 15 stages to Apocalypse.<br>Collect 5 to 75 diamonds, mutate your DNA, and survive moving black holes &amp; lightning storms.</p>
+      <div class="btns">
+        <button class="btn gold" id="btn-continue" style="display:none">Continue</button>
+        <button class="btn" id="btn-play">Play</button>
+        <button class="btn ghost" id="btn-how">How to Play</button>
+      </div>
+      <div id="best">Best score: 0</div>
+      <div class="hint">Drag anywhere to swim · Arrows / WASD on keyboard · P to pause · M to mute</div>
+    </div>
+
+    <!-- Tutorial -->
+    <div class="screen" id="s-tutorial">
+      <div class="tcard on">
+        <div class="ico">🕹️</div>
+        <h3>Swim</h3>
+        <p>Drag anywhere on screen to move, or use Arrow keys / WASD. Patience and steady movement keep you alive!</p>
+      </div>
+      <div class="tcard">
+        <div class="ico">🔫</div>
+        <h3>Auto-Fire</h3>
+        <p>You shoot automatically at the nearest creature. Ammo refills from the cyan orbs enemies drop.</p>
+      </div>
+      <div class="tcard">
+        <div class="ico">💎</div>
+        <h3>Absorb &amp; Collect</h3>
+        <p>Eat green biomass and gather diamonds (5 on Stage 1, 10 on Stage 2, up to 75 on Stage 15) before time expires.</p>
+      </div>
+      <div class="tcard">
+        <div class="ico">⚡</div>
+        <h3>Storms &amp; Black Holes</h3>
+        <p>Dodge moving black holes and lightning warning circles—or patiently lure enemies into them for easy kills!</p>
+      </div>
+      <div class="tcard">
+        <div class="ico">🧬</div>
+        <h3>Mutations &amp; 10s Magnet</h3>
+        <p>Pick a DNA mutation after every stage. Grab 🛡️, ⚡, 🔱, ❤️, 🧬 and the 10-second 🧲 Magnet boost in the arena.</p>
+      </div>
+      <div class="dots">
+        <span class="dot on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+      <div class="btns">
+        <button class="btn" id="btn-tut-next">Next</button>
+        <button class="btn ghost" id="btn-tut-skip" style="min-width:160px">Skip</button>
+      </div>
+    </div>
+
+    <!-- Level clear + Mutation choice -->
+    <div class="screen" id="s-levelup">
+      <div class="logo small" id="lu-title">EVOLVED!</div>
+      <p class="msg" id="lu-text"></p>
+      <p class="stat" id="lu-stats"></p>
+      <div id="mut-label">Choose a DNA Mutation (Keys 1 / 2 / 3)</div>
+      <div id="mut-choices"></div>
+      <div class="btns"><button class="btn gold" id="btn-next">Continue</button></div>
+    </div>
+
+    <!-- Game over -->
+    <div class="screen" id="s-dead">
+      <div class="bad">EXTINCT</div>
+      <p class="msg" id="dead-text"></p>
+      <p class="stat" id="dead-score"></p>
+      <p class="note" id="dead-note"></p>
+      <div class="btns">
+        <button class="btn gold" id="btn-revive">▶ Watch Ad to Revive</button>
+        <button class="btn" id="btn-retry">Retry Level</button>
+        <button class="btn ghost" id="btn-restart">Start Over</button>
+      </div>
+    </div>
+
+    <!-- Victory -->
+    <div class="screen" id="s-won">
+      <div class="logo small">APOCALYPSE SURVIVED</div>
+      <p class="msg" id="won-text"></p>
+      <p class="stat" id="won-stats"></p>
+      <div class="btns"><button class="btn gold" id="btn-again">Play Again</button></div>
+    </div>
+
+    <!-- Pause -->
+    <div class="screen" id="s-pause">
+      <h2>PAUSED</h2>
+      <div class="btns">
+        <button class="btn" id="btn-resume">Resume</button>
+        <button class="btn ghost" id="btn-quit">Main Menu</button>
+      </div>
+    </div>
+
+    <button class="icon-btn" id="btn-mute" aria-label="Mute">🔊</button>
+  </div>
+
+  <!-- Shown on mobile touch devices in portrait orientation -->
+  <div id="rotate">
+    <div class="rot-ico">📱</div>
+    <h2>Rotate your device</h2>
+    <p>Evolve: The Deep is played in landscape.</p>
+  </div>
+
+  <noscript><div>Evolve: The Deep needs JavaScript to run.</div></noscript>
+
   <script src="game.js" defer></script>
 </body>
 </html>
